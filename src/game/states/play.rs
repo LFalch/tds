@@ -184,6 +184,11 @@ impl GameState for Play {
                 GrenadeUpdate::Dead => {
                     deads.push(i);
                 }
+                GrenadeUpdate::Thrown{..} => {
+                    s.mplayer.play(ctx, "throw")?;
+                    grenade.obj.pos = self.world.player.obj.pos + 20. * angle_to_vec(self.world.player.obj.rot);
+                    grenade.vel = grenade.vel.norm() * angle_to_vec(self.world.player.obj.rot);
+                },
                 GrenadeUpdate::None => (),
             }
         }
@@ -529,8 +534,14 @@ impl GameState for Play {
                     s.mplayer.play(ctx, if backstab {"shuk"} else {"hling"}).unwrap();
                 }
             }
+            _ => (),
+        }
+    }
+
+    fn event_down(&mut self, s: &mut State, ctx: &mut Context, event: Event) {
+        match event {
             Mouse(MouseButton::Right) => {
-                if let Some(gm) = self.world.player.wep.utilities.throw_grenade(ctx, &mut s.mplayer).unwrap() {
+                if let Some(gm) = self.world.player.wep.utilities.cook_grenade(ctx, &mut s.mplayer).unwrap() {
                     let pos = self.world.player.obj.pos + 20. * angle_to_vec(self.world.player.obj.rot);
                     let mut gren = Object::new(pos);
                     gren.rot = self.world.player.obj.rot;
