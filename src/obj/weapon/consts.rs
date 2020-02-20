@@ -1,4 +1,4 @@
-use super::{FireMode, Weapon, WeaponSlot};
+use super::{FireMode, ReloadMode, Weapon, WeaponSlot};
 use crate::util::{sstr, add_sstr, Sstr};
 
 use lazy_static::lazy_static;
@@ -33,6 +33,8 @@ pub struct WeaponTemplate {
     penetration: f32,
     fire_rate: f32,
     reload_time: f32,
+    #[serde(default)]
+    reload_mode: ReloadMode,
     fire_mode: FireMode,
     #[serde(deserialize_with = "crate::util::deserialize_sstr")]
     shot_snd: Sstr,
@@ -85,6 +87,7 @@ impl WeaponTemplate {
             penetration,
             fire_rate,
             reload_time,
+            reload_mode,
             fire_mode,
             shot_snd,
             cock_snd,
@@ -108,6 +111,7 @@ impl WeaponTemplate {
             penetration,
             fire_rate,
             reload_time,
+            reload_mode,
             fire_mode,
             shot_snd,
             cock_snd,

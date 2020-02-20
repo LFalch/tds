@@ -42,6 +42,19 @@ impl FireMode {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ReloadMode {
+    Magazine,
+    RoundByRound,
+}
+
+impl Default for ReloadMode {
+    fn default() -> Self{
+        ReloadMode::Magazine
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Weapon {
     pub id: Sstr,
@@ -55,6 +68,7 @@ pub struct Weapon {
     pub fire_rate: f32,
     /// Time to reload a new clip/magazine
     pub reload_time: f32,
+    pub reload_mode: ReloadMode,
     pub fire_mode: FireMode,
     pub shot_snd: Sstr,
     pub cock_snd: Sstr,
@@ -84,6 +98,7 @@ impl Weapon {
             jerk_decay: 0.,
             spray_index: 0,
             ammo: cur_clip*self.clips.get(),
+            is_reloading: false,
         }
     }
     pub fn make_drop(&self, pos: Point2) -> WeaponDrop<'_> {
@@ -124,6 +139,7 @@ pub struct WeaponInstance<'a> {
     pub jerk_decay: f32,
     pub spray_index: usize,
     pub weapon: &'a Weapon,
+    pub is_reloading: bool,
 }
 
 impl Display for WeaponInstance<'_> {
@@ -165,6 +181,7 @@ impl<'a> WeaponInstance<'a> {
             cur_clip,
             ammo,
             weapon,
+            is_reloading: false,
         }
     }
     pub fn update(&mut self, ctx: &mut Context, mplayer: &mut MediaPlayer) -> GameResult<()> {
@@ -175,11 +192,14 @@ impl<'a> WeaponInstance<'a> {
         } else {
             self.jerk_decay -= DELTA;
         }
+        if self.is_reloading {
+            self.reload(ctx, mplayer)?;
+        }
         if self.loading_time <= DELTA {
             self.loading_time = 0.;
         } else {
             self.loading_time -= DELTA;
-            if self.loading_time <= DELTA {
+            if self.loading_time <= DELTA && ReloadMode::RoundByRound != self.weapon.reload_mode {
                 mplayer.play(ctx, &self.weapon.cock_snd)?;
             }
         }
@@ -188,21 +208,38 @@ impl<'a> WeaponInstance<'a> {
     pub fn reload(&mut self, ctx: &mut Context, mplayer: &mut MediaPlayer) -> GameResult<()> {
         let clip_size = self.weapon.clip_size.get();
         if self.cur_clip == clip_size || self.ammo == 0 {
+            self.is_reloading = false;
             return Ok(())
         }
-
+        if self.loading_time != 0. {
+            return Ok(())
+        }
         self.loading_time = self.weapon.reload_time;
-
-        let ammo_to_reload = self.weapon.clip_size.get() - self.cur_clip;
+        mplayer.play(ctx, &self.weapon.reload_snd)?;
+        if !self.is_reloading {
+            self.is_reloading = true;
+            return Ok(())
+        }
+        let ammo_to_reload: u16;
+        if let ReloadMode::RoundByRound = self.weapon.reload_mode { 
+            ammo_to_reload = 1;
+        } else {
+            ammo_to_reload = clip_size - self.cur_clip;
+        }
 
         if self.ammo < ammo_to_reload {
             self.cur_clip += self.ammo;
             self.ammo = 0;
+            self.is_reloading = false;
         } else {
             self.ammo -= ammo_to_reload;
-            self.cur_clip = clip_size;
+            self.cur_clip += ammo_to_reload;
         }
-        mplayer.play(ctx, &self.weapon.reload_snd)
+        if self.cur_clip == clip_size {
+            self.is_reloading = false;
+            self.loading_time = 0.;
+        }
+        Ok(())
     }
     fn next_jerk(&mut self) -> f32 {
         let jerk = self.jerk;
@@ -217,12 +254,16 @@ impl<'a> WeaponInstance<'a> {
         jerk
     }
     pub fn shoot(&mut self, ctx: &mut Context, mplayer: &mut MediaPlayer) -> GameResult<Option<BulletMaker<'a>>> {
+        if ReloadMode::RoundByRound == self.weapon.reload_mode && self.is_reloading && self.cur_clip > 0 {
+            self.is_reloading = false;
+            self.loading_time = 0.;
+        }
         if self.cur_clip > 0 && self.loading_time == 0. {
             self.cur_clip -= 1;
             if self.cur_clip > 0 {
                 self.loading_time = self.weapon.fire_rate;
             }
-
+            self.is_reloading = false;
             mplayer.play(ctx, &self.weapon.shot_snd)?;
 
             let jerks = match self.weapon.fire_mode {
@@ -236,7 +277,7 @@ impl<'a> WeaponInstance<'a> {
 
             Ok(Some(BulletMaker(self.weapon, jerks)))
         } else {
-            if self.cur_clip == 0 {
+            if self.cur_clip == 0 && !self.is_reloading {
                 mplayer.play(ctx, &self.weapon.click_snd)?;
             }
             Ok(None)

@@ -7,7 +7,7 @@ const EFFECTS_LIMIT: usize = 25;
 
 fn new_source(ctx: &mut Context, data: &SoundData) -> GameResult<Source> {
     Source::from_data(ctx, data.clone()).map(|mut src| {
-        src.set_volume(0.1);
+        src.set_volume(0.01);
         src
     })
 }
@@ -76,7 +76,7 @@ impl MediaPlayer {
     fn new_cache(&self, ctx: &mut Context, s: &str, repeat: bool) -> GameResult<Source> {
         Source::from_data(ctx, self.data[s].clone())
             .map(|mut src| {
-                src.set_volume(0.25);
+                src.set_volume(0.05);
                 src.set_repeat(repeat);
                 src
             })
